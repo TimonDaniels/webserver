@@ -1,3 +1,4 @@
+import os
 import socket
 import time
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from http.client import HTTPException
 
 HOST = "localhost"
 PORT = 8080
+WEBSITE_DATA_DIR = "website_data"
 
 
 @dataclass(frozen=True)
@@ -12,29 +14,63 @@ class HTTPRequest():
     method: str
     path: str
     version: str
-    
+    headers: dict[str, str]
 
-def handle_request(request: HTTPRequest, headers: dict[str, str]) -> str:
+def handle_request(request: HTTPRequest) -> str:
     path = request.path
+    status_line = "HTTP/1.1 200 OK"
+    
+    # get content type based on the path
+    if path.endswith(".css"):
+        content_type = "text/css"
+    elif path.endswith(".js"):
+        content_type = "application/javascript"
+    elif path.endswith(".png"):
+        content_type = "image/png"
+    elif path.endswith(".jpg") or path.endswith(".jpeg"):
+        content_type = "image/jpeg"
+    elif path.endswith(".gif"):
+        content_type = "image/gif"
+    else: 
+        content_type = "text/html"
 
-    match path:
-        case "/":
-            with open("index.html", "r") as f:
+    # Load the HTML content 
+    if path.endswith(".css") or path.endswith(".js") or path.endswith(".png") or path.endswith(".jpg") or path.endswith(".jpeg") or path.endswith(".gif"):
+        try:
+            with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "r") as f:
                 html_content = f.read()
-        case "/contact":
-            with open("contact.html", "r") as f:
-                html_content = f.read()
-        case "/properties":
-            with open("properties.html", "r") as f:
-                html_content = f.read()
-        case "/property-details":
-            with open("property-details.html", "r") as f:
-                html_content = f.read()
-        case _:
-            raise HTTPException(404, "Not Found", "The requested resource was not found on the server.")
+        except FileNotFoundError:
+            status_line = "HTTP/1.1 404 Not Found"
+            html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
+    
+    else:
+        try:
+            match path:
+                case "/":
+                    with open(os.path.join(WEBSITE_DATA_DIR, "index.html"), "r") as f:
+                        html_content = f.read()
+                case "/contact":
+                    with open(os.path.join(WEBSITE_DATA_DIR, "contact.html"), "r") as f:
+                        html_content = f.read()
+                case "/properties":
+                    with open(os.path.join(WEBSITE_DATA_DIR, "properties.html"), "r") as f:
+                        html_content = f.read()
+                case "/property-details":
+                    with open(os.path.join(WEBSITE_DATA_DIR, "property-details.html"), "r") as f:
+                        html_content = f.read()
+                case _:
+                    status_line = "HTTP/1.1. 404 page not found"
+                    html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
+        except:
+            status_line = "HTTP/1.1 500 Internal Server Error"
+            html_content = "<html><body><h1>500 Internal Server Error</h1><p>There was an error processing your request.</p></body></html>"
+   
+    # create the response
+    content_length = len(html_content)
+    response = f"{status_line}\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n{html_content}"
+    return response
 
-
-def parse_request(data: bytes) -> tuple[HTTPRequest, dict[str, str]]:
+def parse_request(data: bytes) -> HTTPRequest:
     """
     Parses the HTTP request data bytes from a socket.recv() call
     and returns an HTTPRequest object and headers.
@@ -54,7 +90,6 @@ def parse_request(data: bytes) -> tuple[HTTPRequest, dict[str, str]]:
             print(f"PUT request for {path}")
         case "DELETE":
             print(f"DELETE request for {path}")
-    request = HTTPRequest(method, path, version)
     
     # convert headers to a dictionary
     headers = {}
@@ -67,7 +102,8 @@ def parse_request(data: bytes) -> tuple[HTTPRequest, dict[str, str]]:
     for key, value in headers.items():
         print(f"{key}: {value}")
 
-    return request, headers
+    request = HTTPRequest(method, path, version, headers)
+    return request
 
 
 
@@ -90,16 +126,17 @@ if __name__ == "__main__":
 
             # Receive client request
             data = conn.recv(1024)
-            request, headers = parse_request(data)
+            print("Data received from client:", data.decode('utf-8'))
+            request = parse_request(data)
             if not data:
                 print("No data received, closing connection.")
                 conn.close()
                 continue
 
-            print(f"Received data: {request}")
+            # Handle the request
+            response = handle_request(request)
 
             # Send a response
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello, World!"
             conn.sendall(response.encode('utf-8'))
             print("Response sent to client.")
 
