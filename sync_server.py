@@ -17,6 +17,8 @@ class HTTPRequest():
     headers: dict[str, str]
 
 def handle_request(request: HTTPRequest) -> str:
+    assert isinstance(request, HTTPRequest), "request must be an instance of HTTPRequest"
+
     path = request.path
     status_line = "HTTP/1.1 200 OK"
     
@@ -37,37 +39,35 @@ def handle_request(request: HTTPRequest) -> str:
     # Load the HTML content 
     if path.endswith(".css") or path.endswith(".js") or path.endswith(".png") or path.endswith(".jpg") or path.endswith(".jpeg") or path.endswith(".gif"):
         try:
-            with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "r") as f:
-                html_content = f.read()
+            with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "rb") as f:
+                html_content_bytes = f.read()
         except FileNotFoundError:
             status_line = "HTTP/1.1 404 Not Found"
-            html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
+            html_content_bytes = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>".encode('utf-8')
+        assert isinstance(html_content_bytes, bytes), "html_content must be of type bytes"
     
     else:
         try:
-            match path:
-                case "/":
-                    with open(os.path.join(WEBSITE_DATA_DIR, "index.html"), "r") as f:
-                        html_content = f.read()
-                case "/contact":
-                    with open(os.path.join(WEBSITE_DATA_DIR, "contact.html"), "r") as f:
-                        html_content = f.read()
-                case "/properties":
-                    with open(os.path.join(WEBSITE_DATA_DIR, "properties.html"), "r") as f:
-                        html_content = f.read()
-                case "/property-details":
-                    with open(os.path.join(WEBSITE_DATA_DIR, "property-details.html"), "r") as f:
-                        html_content = f.read()
-                case _:
-                    status_line = "HTTP/1.1. 404 page not found"
-                    html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
+            if path == '/':
+                with open(os.path.join(WEBSITE_DATA_DIR, "index.html"), "r") as f:
+                    html_content = f.read()
+            elif path.endswith(".html"):
+                with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "r") as f:
+                    html_content = f.read()
+            else:
+                status_line = "HTTP/1.1. 404 page not found"
+                html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
         except:
             status_line = "HTTP/1.1 500 Internal Server Error"
             html_content = "<html><body><h1>500 Internal Server Error</h1><p>There was an error processing your request.</p></body></html>"
-   
+        html_content_bytes = html_content.encode('utf-8')
+        assert isinstance(html_content_bytes, bytes), "html_content must be of type bytes"
+
     # create the response
-    content_length = len(html_content)
-    response = f"{status_line}\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n{html_content}"
+    content_length = len(html_content_bytes)
+    response = f"{status_line}\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\n\r\n".encode('utf-8') + html_content_bytes 
+
+    assert isinstance(response, bytes), "response must be of type bytes"
     return response
 
 def parse_request(data: bytes) -> HTTPRequest:
@@ -75,6 +75,9 @@ def parse_request(data: bytes) -> HTTPRequest:
     Parses the HTTP request data bytes from a socket.recv() call
     and returns an HTTPRequest object and headers.
     """
+    assert isinstance(data, bytes), "data must be of type bytes"
+    assert len(data) > 0, "data must not be empty"
+
     data_str = data.decode('utf-8')
     lines = data_str.split('\r\n')
 
@@ -90,6 +93,8 @@ def parse_request(data: bytes) -> HTTPRequest:
             print(f"PUT request for {path}")
         case "DELETE":
             print(f"DELETE request for {path}")
+        case _:
+            print(f"Unknown request method: {method}")
     
     # convert headers to a dictionary
     headers = {}
@@ -98,6 +103,8 @@ def parse_request(data: bytes) -> HTTPRequest:
             break
         key, value = line.split(': ', 1)
         headers[key] = value
+    assert len(headers) > 0, "headers must not be empty"
+
     print("Headers:")
     for key, value in headers.items():
         print(f"{key}: {value}")
@@ -137,9 +144,12 @@ if __name__ == "__main__":
             response = handle_request(request)
 
             # Send a response
-            conn.sendall(response.encode('utf-8'))
+            conn.sendall(response)
             print("Response sent to client.")
 
         except socket.error as e:
             print("Error occurred:", e)
             time.sleep(1)
+        except KeyboardInterrupt:
+            print("Server shutting down...")
+            break
