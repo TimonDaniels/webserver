@@ -1,10 +1,8 @@
 import os
 import socket
-import time
 import asyncio
-import threading
+import aiofiles
 from dataclasses import dataclass
-from http.client import HTTPException
 
 HOST = "localhost"
 PORT = 8080
@@ -17,6 +15,29 @@ class HTTPRequest():
     path: str
     version: str
     headers: dict[str, str]
+
+async def read_file_async(path: str, mode: str = 'rb') -> bytes:
+    """Asynchronously load a file and return its content as bytes."""
+    assert isinstance(path, str), "path must be of type str"
+
+    try:
+        async with aiofiles.open(path, mode) as f:
+            content = await f.read()
+        return content
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File {path} not found in {WEBSITE_DATA_DIR}")
+
+
+def read_file_sync(path: str, mode: str = 'rb') -> bytes:
+    assert isinstance(path, str), "path must be of type str"
+
+    try:
+        with open(path, mode) as f:
+            content = f.read()
+        return content
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File {path} not found in {WEBSITE_DATA_DIR}")
+
 
 async def handle_request(request: HTTPRequest) -> str:
     assert isinstance(request, HTTPRequest), "request must be an instance of HTTPRequest"
@@ -38,11 +59,10 @@ async def handle_request(request: HTTPRequest) -> str:
     else: 
         content_type = "text/html"
 
-    # Load the HTML content 
     if path.endswith(".css") or path.endswith(".js") or path.endswith(".png") or path.endswith(".jpg") or path.endswith(".jpeg") or path.endswith(".gif"):
         try:
-            with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "rb") as f:
-                html_content_bytes = f.read()
+            file_path = os.path.join(WEBSITE_DATA_DIR, path.lstrip('/'))
+            html_content_bytes = read_file_sync(file_path, 'rb')
         except FileNotFoundError:
             status_line = "HTTP/1.1 404 Not Found"
             html_content_bytes = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>".encode('utf-8')
@@ -51,11 +71,11 @@ async def handle_request(request: HTTPRequest) -> str:
     else:
         try:
             if path == '/':
-                with open(os.path.join(WEBSITE_DATA_DIR, "index.html"), "r") as f:
-                    html_content = f.read()
+                file_path = os.path.join(WEBSITE_DATA_DIR, "index.html")
+                html_content = read_file_sync(file_path, 'r')
             elif path.endswith(".html"):
-                with open(os.path.join(WEBSITE_DATA_DIR, path.lstrip('/')), "r") as f:
-                    html_content = f.read()
+                file_path = os.path.join(WEBSITE_DATA_DIR, path.lstrip('/'))
+                html_content = read_file_sync(file_path, 'r')
             else:
                 status_line = "HTTP/1.1. 404 page not found"
                 html_content = "<html><body><h1>404 Not Found</h1><p>The requested resource was not found on the server.</p></body></html>"
@@ -71,6 +91,7 @@ async def handle_request(request: HTTPRequest) -> str:
 
     assert isinstance(response, bytes), "response must be of type bytes"
     return response
+
 
 async def parse_request(data: bytes) -> HTTPRequest:
     """

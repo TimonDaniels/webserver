@@ -125,31 +125,34 @@ if __name__ == "__main__":
 
     s.listen(5)
     print(f"Server is listening on {HOST}:{PORT}...")
-    while True:
-        try:
-            # Accept a connection
-            conn, addr = s.accept()
-            print(f"Connection from {addr} has been established!")
+    try:
+        while True:
+            try:
+                # Accept a connection
+                conn, addr = s.accept()
+                print(f"Connection from {addr} has been established!")
 
-            # Receive client request
-            data = conn.recv(1024)
-            print("Data received from client:", data.decode('utf-8'))
-            request = parse_request(data)
-            if not data:
-                print("No data received, closing connection.")
-                conn.close()
-                continue
+                # Receive client request
+                data = conn.recv(1024)
+                print("Data received from client:", data.decode('utf-8'))
+                request = parse_request(data)
+                if not data:
+                    print("No data received, closing connection.")
+                    conn.close()
+                    continue
 
-            # Handle the request
-            response = handle_request(request)
+                # Handle the request
+                response = handle_request(request)
 
-            # Send a response
-            conn.sendall(response)
-            print("Response sent to client.")
+                # Send a response
+                conn.sendall(response)
+                print("Response sent to client.")
 
-        except socket.error as e:
-            print("Error occurred:", e)
-            time.sleep(1)
-        except KeyboardInterrupt:
-            print("Server shutting down...")
-            break
+            except socket.error as e:
+                print("Error occurred:", e)
+                time.sleep(1)
+    except KeyboardInterrupt:
+        print("Server shutting down...")
+    finally:
+        s.close()
+        print("Socket closed.") 
